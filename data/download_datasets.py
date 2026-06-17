@@ -2,8 +2,12 @@
 Download and format all datasets for the QLoRA-forgetting study.
 
 Fixes applied on top of starter-asis (report §8.1):
-  B1  MedQA `options` is a LIST of {"key","value"} dicts, not a dict —
-      the old `.items()` call would crash. Iterate the list instead.
+  B1  MedQA: the report's bigbio/med_qa is a *loading-script* dataset, which
+      the new `datasets` (v4+) refuses ("trust_remote_code not supported").
+      Switched to GBaker/MedQA-USMLE-4-options — a Parquet (script-free)
+      mirror. Its `options` is a DICT {"A": "...", ...}, so iterate .items().
+      (Likewise Samsung/samsum was script-based → use knkarthick/samsum,
+       a Parquet mirror with identical dialogue/summary columns.)
   B2  Create `data/` before writing, else open(...,"w") raises.
   C3  Dolly was downloaded but never saved, and its columns differ
       (instruction/context/response) — format + save it for the C4 ablation.
@@ -14,19 +18,19 @@ Fixes applied on top of starter-asis (report §8.1):
 from datasets import load_dataset
 import json, os
 
-# ── Download datasets ───────────────────────────────────────────
-medqa  = load_dataset("bigbio/med_qa", name="med_qa_en_source",
-                      trust_remote_code=True)
-samsum = load_dataset("Samsung/samsum")
+# ── Download datasets (all Parquet / script-free, work on datasets v4+) ──
+medqa  = load_dataset("GBaker/MedQA-USMLE-4-options")   # ~10,178 train
+samsum = load_dataset("knkarthick/samsum")              # 14,732 train
 alpaca = load_dataset("yahma/alpaca-cleaned")
 dolly  = load_dataset("databricks/databricks-dolly-15k")
 
 # ── Format MedQA into instruction format ───────────────────────
-# Source schema: question, answer (text), answer_idx (letter),
-#                options = [{"key": "A", "value": "..."}, ...]
+# Source schema (GBaker/MedQA-USMLE-4-options):
+#   question (str), answer (full text), answer_idx (letter "A".."D"),
+#   options = {"A": "...", "B": "...", "C": "...", "D": "..."}  (a dict)
 def format_medqa(example):
     options = " | ".join(
-        f"{opt['key']}) {opt['value']}" for opt in example["options"]
+        f"{k}) {v}" for k, v in example["options"].items()
     )
     # D5 hybrid target: letter prefix + full answer text.
     # Letter is the gold (answer_idx); text grounds the small model.
