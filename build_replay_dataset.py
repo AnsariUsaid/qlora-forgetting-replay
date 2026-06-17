@@ -19,8 +19,13 @@ def build_replay_dataset(
     n_replay = int(len(task_data) * replay_ratio)
 
     if n_replay == 0:
+        # Shuffle even with no replay so the baseline (0%) runs see data in the
+        # same randomized order as every replay run — otherwise the most
+        # important condition is the only one trained on raw dataset order.
+        combined = list(task_data)          # copy — don't mutate caller's list
+        random.shuffle(combined)
         print(f"[Replay] ratio=0 → pure task training, {len(task_data)} samples")
-        return task_data
+        return combined
 
     replay_samples = random.sample(alpaca_data, n_replay)
 
