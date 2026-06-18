@@ -72,6 +72,11 @@ samsum_formatted = [format_samsum(x) for x in samsum["train"]]
 alpaca_data      = list(alpaca["train"])          # already instruction/input/output
 dolly_formatted  = [format_dolly(x) for x in dolly["train"]]  # C3
 
+# Held-out TEST splits — used by evaluate_task.py to score task performance on
+# data the model never trained on (MedQA and Samsum both ship a test split).
+medqa_test  = [format_medqa(x)  for x in medqa["test"]]
+samsum_test = [format_samsum(x) for x in samsum["test"]]
+
 with open("data/medqa_train.json", "w") as f:
     json.dump(medqa_formatted, f)
 with open("data/samsum_train.json", "w") as f:
@@ -80,9 +85,13 @@ with open("data/alpaca_cleaned.json", "w") as f:
     json.dump(alpaca_data, f)
 with open("data/dolly_15k.json", "w") as f:                    # C3
     json.dump(dolly_formatted, f)
+with open("data/medqa_test.json", "w") as f:
+    json.dump(medqa_test, f)
+with open("data/samsum_test.json", "w") as f:
+    json.dump(samsum_test, f)
 
-print(f"MedQA:  {len(medqa_formatted)} samples")
-print(f"Samsum: {len(samsum_formatted)} samples")
+print(f"MedQA:  {len(medqa_formatted)} train / {len(medqa_test)} test")
+print(f"Samsum: {len(samsum_formatted)} train / {len(samsum_test)} test")
 print(f"Alpaca: {len(alpaca_data)} samples")
 print(f"Dolly:  {len(dolly_formatted)} samples")
 
