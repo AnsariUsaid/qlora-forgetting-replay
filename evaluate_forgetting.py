@@ -36,17 +36,44 @@ ZERO_SHOT_TASKS = {
 MMLU_METRIC = "acc,none"
 
 
-def build_model_args(quant_bits: int, base_model: str, adapter: str = None) -> str:
-    """lm-eval model_args string. Loads the base model at the requested bit-width
-    (matching training), with the LoRA adapter on top if one is given."""
-    parts = [f"pretrained={base_model}", "dtype=float16"]   # float16 = T4-safe
+def load_eval_model(quant_bits: int, base_model: str, adapter: str = None,
+                    batch_size: int = 4):
+    """Load base (+adapter) at the requested bit-width and wrap it for lm-eval.
+
+    We build the model ourselves with a BitsAndBytesConfig rather than passing
+    load_in_4bit through lm-eval's model_args string: new transformers (v5) no
+    longer accepts load_in_4bit as a from_pretrained kwarg, so the string path
+    crashes (TypeError: unexpected keyword 'load_in_4bit'). Loading the model
+    once here also avoids reloading it for each of the two eval passes.
+    """
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from lm_eval.models.huggingface import HFLM
+
+    quant_config = None
     if quant_bits == 4:
-        parts.append("load_in_4bit=True")
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",                  # matches training (NF4)
+            bnb_4bit_compute_dtype=torch.float16,       # T4-safe
+            bnb_4bit_use_double_quant=True,
+        )
     elif quant_bits == 8:
-        parts.append("load_in_8bit=True")
+        quant_config = BitsAndBytesConfig(load_in_8bit=True)
+    # quant_bits == 16 → quant_config stays None → full-precision load.
+
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model,
+        quantization_config=quant_config,
+        torch_dtype=torch.float16,
+        device_map={"": 0},                             # single GPU
+    )
     if adapter:
-        parts.append(f"peft={adapter}")
-    return ",".join(parts)
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, adapter)
+
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    return HFLM(pretrained=model, tokenizer=tokenizer, batch_size=batch_size)
 
 
 def _get_metric(results: dict, task: str, preferred: str) -> float:
@@ -61,18 +88,15 @@ def _get_metric(results: dict, task: str, preferred: str) -> float:
     raise KeyError(f"No accuracy metric found for task '{task}' in {list(d)}")
 
 
-def _run_eval(model_args: str, tasks, num_fewshot: int, batch_size: int, limit):
-    """One lm-eval pass over `tasks`; returns the raw results dict."""
+def _run_eval(lm, tasks, num_fewshot: int, limit):
+    """One lm-eval pass over `tasks` with a pre-loaded model; returns results."""
     import lm_eval
-    out = lm_eval.simple_evaluate(
-        model="hf",
-        model_args=model_args,
+    return lm_eval.simple_evaluate(
+        model=lm,
         tasks=list(tasks),
         num_fewshot=num_fewshot,
-        batch_size=batch_size,
         limit=limit,          # None = full; a number = quick sanity subset
     )
-    return out
 
 
 def evaluate_forgetting(quant_bits: int, run_name: str, csv_path: str,
@@ -80,11 +104,12 @@ def evaluate_forgetting(quant_bits: int, run_name: str, csv_path: str,
                         baseline_file: str = "results/baselines.json",
                         batch_size: int = 4, limit=None) -> dict:
     is_baseline = adapter is None
-    model_args = build_model_args(quant_bits, base_model, adapter)
+    lm = load_eval_model(quant_bits, base_model, adapter, batch_size)
 
-    # C2: MMLU is 5-shot; the commonsense tasks are 0-shot → two separate calls.
-    mmlu_res  = _run_eval(model_args, ["mmlu"], 5, batch_size, limit)
-    other_res = _run_eval(model_args, list(ZERO_SHOT_TASKS), 0, batch_size, limit)
+    # C2: MMLU is 5-shot; the commonsense tasks are 0-shot → two separate calls
+    # (same loaded model reused for both).
+    mmlu_res  = _run_eval(lm, ["mmlu"], 5, limit)
+    other_res = _run_eval(lm, list(ZERO_SHOT_TASKS), 0, limit)
 
     scores = {"mmlu": _get_metric(mmlu_res, "mmlu", MMLU_METRIC)}
     for task, metric in ZERO_SHOT_TASKS.items():
