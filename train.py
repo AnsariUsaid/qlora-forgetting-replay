@@ -18,8 +18,7 @@ Fixes applied on top of starter-asis:
       a command-line option, not a code edit.
 """
 from unsloth import FastLanguageModel
-from trl import SFTTrainer
-from transformers import TrainingArguments
+from trl import SFTTrainer, SFTConfig
 from datasets import Dataset
 import torch, json, argparse, wandb
 from build_replay_dataset import build_replay_dataset
@@ -50,15 +49,15 @@ def verify_quantization(model, quant_bits):
 
 
 def run_experiment(quant_bits: int, replay_ratio: float, task: str,
-                   max_samples: int = None, epochs: int = 3):
+                   max_samples: int = None, epochs: int = 3,
+                   batch_size: int = 2, grad_accum: int = 8):
     # ── Config ─────────────────────────────────────────────────────
+    # Effective batch = batch_size * grad_accum = 16 (T4-safe defaults).
     MODEL_NAME = "unsloth/gemma-2-2b"   # full-precision (BF16) base; quantize at load
     MAX_SEQ_LEN = 512
     LORA_RANK = 16
     LORA_ALPHA = 32
     LR = 2e-4
-    BATCH_SIZE = 4
-    GRAD_ACCUM = 4
 
     run_name = f"gemma2b_{quant_bits}bit_replay{int(replay_ratio*100)}pct_{task}"
     wandb.init(project="qlora-forgetting", name=run_name,
@@ -134,20 +133,24 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
     ds = ds.map(format_prompts, batched=True)
 
     # ── Train ─────────────────────────────────────────────────────
+    # D2: new trl wants SFTConfig (not TrainingArguments), max_length (not
+    # max_seq_length), and processing_class (not tokenizer). The old API silently
+    # dropped per_device_train_batch_size → trl defaulted to 8 → CUDA OOM on T4.
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=ds,
-        dataset_text_field="text",
-        max_seq_length=MAX_SEQ_LEN,
-        args=TrainingArguments(
-            per_device_train_batch_size=BATCH_SIZE,
-            gradient_accumulation_steps=GRAD_ACCUM,
+        args=SFTConfig(
+            dataset_text_field="text",
+            max_length=MAX_SEQ_LEN,
+            per_device_train_batch_size=batch_size,
+            gradient_accumulation_steps=grad_accum,
             warmup_steps=50,
             num_train_epochs=epochs,
             learning_rate=LR,
             fp16=not torch.cuda.is_bf16_supported(),
             bf16=torch.cuda.is_bf16_supported(),
+            optim="adamw_8bit",
             logging_steps=10,
             output_dir=f"outputs/{run_name}",
             report_to="wandb",
@@ -184,6 +187,10 @@ if __name__ == "__main__":
     parser.add_argument("--max_samples", type=int, default=None,  # sanity run
                         help="Truncate task data to this many samples (e.g. 500).")
     parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--batch_size", type=int, default=2,      # T4-safe
+                        help="Per-device batch size. Lower if you hit CUDA OOM.")
+    parser.add_argument("--grad_accum", type=int, default=8)
     args = parser.parse_args()
     run_experiment(args.quant, args.replay, args.task,
-                   max_samples=args.max_samples, epochs=args.epochs)
+                   max_samples=args.max_samples, epochs=args.epochs,
+                   batch_size=args.batch_size, grad_accum=args.grad_accum)

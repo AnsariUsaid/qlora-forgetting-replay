@@ -12,12 +12,15 @@ recover the same capability.
 - \+ 6 ablation runs later (Alpaca vs Dolly replay source)
 
 ## Datasets and their roles
-| Dataset | Role |
-|---|---|
-| MedQA  | task (fine-tune target) |
-| Samsum | task (fine-tune target) |
-| Alpaca | replay buffer (mixed into task runs to fight forgetting) |
-| Dolly  | alternate replay buffer (C4 ablation: does replay source matter?) |
+| Dataset | HF source (Parquet, datasets-v4 safe) | Role | Train rows |
+|---|---|---|---|
+| MedQA  | `GBaker/MedQA-USMLE-4-options` | task (fine-tune target) | 10,178 |
+| Samsum | `knkarthick/samsum` | task (fine-tune target) | 14,731 |
+| Alpaca | `yahma/alpaca-cleaned` | replay buffer (fights forgetting) | 51,760 |
+| Dolly  | `databricks/databricks-dolly-15k` | alternate replay buffer (C4 ablation) | 15,011 |
+
+> Note: report's original `bigbio/med_qa` + `Samsung/samsum` are loading-script
+> datasets that the new `datasets` v4 refuses — swapped for the Parquet mirrors above.
 
 All four are normalized to `{instruction, input, output}` so any can be mixed.
 **Mixing only ever happens as: one task + a slice of replay buffer.** Never task+task.
@@ -34,21 +37,25 @@ All four are normalized to `{instruction, input, output}` so any can be mixed.
 - Starter code §8.1-8.5 committed, tagged `starter-asis`.
 - `download_datasets.py` fixed (B1/B2/C3/D5), committed, pushed.
 
-### [ ] Phase 2 — Get the data  ← CURRENT
-- Run the Kaggle cells: download + format MedQA / Samsum / Alpaca / Dolly.
-- Verify sample counts (MedQA ~12,723 · Samsum ~14,732 · Alpaca ~51,760 · Dolly ~15,011).
-- Confirm B1/C3 schema assumptions held on the live data.
-- Save `data/` as a Kaggle Dataset (no re-download ever).
+### [x] Phase 2 — Get the data
+- Ran the Kaggle cells (DataSets-QLora notebook): download + format all 4 datasets. ✅
+- Verified counts live: MedQA 10,178 · Samsum 14,731 · Alpaca 51,760 · Dolly 15,011. ✅
+- B1/C3 schema confirmed (MedQA hybrid output "D) Nitrofurantoin"). ✅
+- Data saved via Quick Save (notebook output Version). A standalone Kaggle Dataset
+  is optional/later; the real 30 runs will attach saved data instead of re-downloading.
 
-### [ ] Phase 3 — Fix training-path code (before any training)
-1. `build_replay_dataset.py` — fix 0%-replay-unshuffled bug (the task+replay mixer).
-2. `train.py` — **C1 (the big one):** FP16/INT8/NF4 all load from one base model.
-   Also: run-naming (B6), GPU-memory logging (C4), canonical prompt (D1), trl pin (D2).
-3. Standardize adapter save/load paths so train ↔ eval agree.
+### [x] Phase 3 — Fix training-path code (core done)
+1. `build_replay_dataset.py` — 0%-replay-unshuffled fixed. ✅ committed
+2. `train.py` — C1 (FP16/INT8/NF4 from one base) ✅, 8-bit verify ✅, C4 (GPU-mem) ✅,
+   D1 (prompt) ✅, T4-safe dtype ✅, sanity flags (--max_samples/--epochs) ✅. committed
+   - Deferred: B6 run-name ↔ `run_experiment.sh` alignment → Phase 7.
+   - Deferred: D2 trl version pin → goes in the notebook install cell (Phase 4 setup).
+3. Standardize adapter save/load paths (train ↔ eval) → Phase 5 (needs eval code).
 
-### [ ] Phase 4 — Sanity check (one tiny run)
-- 4-bit, 0% replay, MedQA, ~500 samples, 1 epoch.
-- Confirm only: (a) train loss drops, (b) MMLU drops vs baseline, (c) W&B logs it.
+### [ ] Phase 4 — Sanity check (one tiny run)  ← CURRENT
+- 4-bit, 0% replay, MedQA, `--max_samples 500 --epochs 1`, in the QLORA-1 notebook (GPU on).
+- This run validates the TRAINING loop only: (a) quant check passes, (b) train loss drops,
+  (c) W&B logs it, (d) adapter saves. (MMLU-drop check needs eval code → Phase 5.)
 - Gate before spending GPU hours on the full grid.
 
 ### [ ] Phase 5 — Fix evaluation code (before Phase 6)
@@ -88,16 +95,17 @@ Severity: 🔴 blocker (crashes) · 🟠 correctness (wrong results) · 🟡 des
 
 | ID | File | Issue | Status |
 |----|------|-------|--------|
-| B1 | download_datasets.py | MedQA `options` is a list, not dict | ✅ fixed |
+| B1 | download_datasets.py | script-based MedQA/Samsum → Parquet mirrors (datasets v4) | ✅ fixed |
 | B2 | download_datasets.py | missing `os.makedirs("data")` | ✅ fixed |
 | C3 | download_datasets.py | Dolly downloaded but never saved | ✅ fixed |
 | D5 | download_datasets.py | MedQA hybrid output "A) text" | ✅ fixed |
-| — | build_replay_dataset.py | 0%-replay branch returns unshuffled | ⬜ Phase 3 |
-| C1 | train.py | prequantized base; FP16/INT8 impossible | ⬜ Phase 3 |
-| B6 | train.py / run_experiment.sh | adapter path/name mismatch | ⬜ Phase 3 |
-| C4 | train.py | no peak-GPU-memory logging | ⬜ Phase 3 |
-| D1 | train.py | prompt template drift vs download | ⬜ Phase 3 |
-| D2 | train.py | trl version not pinned (API drift) | ⬜ Phase 3 |
+| — | build_replay_dataset.py | 0%-replay branch returns unshuffled | ✅ fixed |
+| C1 | train.py | prequantized base; FP16/INT8 impossible | ✅ fixed |
+| 8b | train.py | verify model is really at requested bits (Unsloth #2679) | ✅ added |
+| C4 | train.py | no peak-GPU-memory logging | ✅ fixed |
+| D1 | train.py | prompt template drift vs download | ✅ fixed |
+| B6 | train.py / run_experiment.sh | adapter path/name mismatch | ⬜ Phase 7 (shell side) |
+| D2 | train.py | trl version not pinned (API drift) | ⬜ Phase 4 (notebook install cell) |
 | B3 | evaluate_forgetting.py | no argparse/__main__ block | ⬜ Phase 5 |
 | B4 | evaluate_forgetting.py | `pretrained=` must be base, `peft=` adapter | ⬜ Phase 5 |
 | B5 | evaluate_forgetting.py | CSV first-write crashes (getsize) | ⬜ Phase 5 |
