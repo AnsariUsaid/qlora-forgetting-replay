@@ -1,0 +1,27 @@
+# QLoRA-forgetting-replay — Python dependencies
+# Install in a Kaggle/Colab notebook with:  !pip install -r setup/requirements.txt
+
+# ── Core training stack (QLoRA via Unsloth) ──────────────────────
+unsloth
+transformers>=4.40.0
+peft>=0.10.0
+trl>=0.8.6
+bitsandbytes
+accelerate
+datasets
+
+# ── Evaluation ───────────────────────────────────────────────────
+lm-eval
+evaluate
+rouge-score
+sacrebleu
+scikit-learn
+
+# ── Utilities / logging ──────────────────────────────────────────
+pandas
+wandb
+
+# NOTE: versions are intentionally loose for now. To make the environment fully
+# reproducible (and avoid the trl/transformers API drift that broke train.py —
+# see the D2 fix), run `pip freeze` in a WORKING Kaggle session and replace the
+# lines above with the exact pinned versions, e.g. transformers==5.5.0, trl==X.Y.Z.
