@@ -103,7 +103,14 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
 
     mixed_data = build_replay_dataset(task_data, alpaca_data, replay_ratio)
 
-    ALPACA_PROMPT = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+    # Split each example into PROMPT (what the model reads) and COMPLETION (what it
+    # must learn to produce). The prompt ends exactly at "### Response:\n"; the answer
+    # is the completion. With completion_only_loss=True (below), trl masks the prompt
+    # from the loss so the model is graded ONLY on the answer — otherwise it spends its
+    # learning memorizing the question, which scrambles general knowledge (forgetting)
+    # without teaching the answer. evaluate_task.py's inference prompt ends at the same
+    # point, so train and inference stay consistent.
+    PROMPT_TEMPLATE = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
 {instruction}
@@ -112,25 +119,20 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
 {input}
 
 ### Response:
-{output}"""
+"""
 
     EOS = tokenizer.eos_token
 
     def format_prompts(examples):
-        texts = [
-            ALPACA_PROMPT.format(
-                instruction=inst, input=inp, output=out
-            ) + EOS
-            for inst, inp, out in zip(
-                examples["instruction"],
-                examples["input"],
-                examples["output"]
-            )
+        prompts = [
+            PROMPT_TEMPLATE.format(instruction=inst, input=inp)
+            for inst, inp in zip(examples["instruction"], examples["input"])
         ]
-        return {"text": texts}
+        completions = [out + EOS for out in examples["output"]]
+        return {"prompt": prompts, "completion": completions}
 
     ds = Dataset.from_list(mixed_data)
-    ds = ds.map(format_prompts, batched=True)
+    ds = ds.map(format_prompts, batched=True, remove_columns=ds.column_names)
 
     # ── Train ─────────────────────────────────────────────────────
     # D2: new trl wants SFTConfig (not TrainingArguments), max_length (not
@@ -141,7 +143,7 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
         processing_class=tokenizer,
         train_dataset=ds,
         args=SFTConfig(
-            dataset_text_field="text",
+            completion_only_loss=True,   # mask the prompt → grade only the answer
             max_length=MAX_SEQ_LEN,
             per_device_train_batch_size=batch_size,
             gradient_accumulation_steps=grad_accum,
