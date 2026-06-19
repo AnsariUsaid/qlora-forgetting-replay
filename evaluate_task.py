@@ -17,6 +17,12 @@ on top, so the measured model matches what was trained.
 """
 import os, json, csv, re, argparse
 
+# Inference context length. Set well above the training max (512) so long MedQA
+# vignettes / Samsum dialogues are never trimmed into the model — an over-length
+# prompt triggers an Unsloth fast-inference crash (bug E2). 2048 covers all prompts,
+# and it's a ceiling (not a per-step cost), so it does not slow generation.
+MAX_SEQ_LEN = 2048
+
 # Inference prompt = the training prompt up to "### Response:" (the model fills
 # in the rest). Must match train.py's ALPACA_PROMPT or the model sees a format
 # it wasn't trained on.
@@ -32,7 +38,7 @@ INFER_PROMPT = """Below is an instruction that describes a task, paired with an 
 """
 
 
-def load_model(quant_bits: int, adapter: str, base_model: str, max_seq_len=512):
+def load_model(quant_bits: int, adapter: str, base_model: str, max_seq_len=MAX_SEQ_LEN):
     """Load base+adapter at the requested bit-width, in inference mode."""
     from unsloth import FastLanguageModel
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -49,7 +55,11 @@ def load_model(quant_bits: int, adapter: str, base_model: str, max_seq_len=512):
 def generate(model, tokenizer, instruction: str, inp: str, max_new_tokens: int) -> str:
     import torch
     prompt = INFER_PROMPT.format(instruction=instruction, input=inp)
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    # Hard-truncate so input + generated tokens stay within the context — prevents the
+    # >max-length Unsloth crash (bug E2). Only fires on rare over-length prompts; the
+    # common case is untouched.
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
+                       max_length=MAX_SEQ_LEN - max_new_tokens).to(model.device)
     with torch.no_grad():
         out = model.generate(
             **inputs, max_new_tokens=max_new_tokens,
