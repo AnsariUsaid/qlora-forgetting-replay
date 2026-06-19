@@ -13,3 +13,6 @@ wandb/
 
 # Downloaded datasets (store as a Kaggle Dataset, not in git)
 data/*.json
+
+# Local session-context dumps (personal notes, not part of the project)
+*-this-is-the-context-*.txt
