@@ -52,21 +52,31 @@ All four are normalized to `{instruction, input, output}` so any can be mixed.
    - Deferred: D2 trl version pin → goes in the notebook install cell (Phase 4 setup).
 3. Standardize adapter save/load paths (train ↔ eval) → Phase 5 (needs eval code).
 
-### [ ] Phase 4 — Sanity check (one tiny run)  ← CURRENT
-- 4-bit, 0% replay, MedQA, `--max_samples 500 --epochs 1`, in the QLORA-1 notebook (GPU on).
-- This run validates the TRAINING loop only: (a) quant check passes, (b) train loss drops,
-  (c) W&B logs it, (d) adapter saves. (MMLU-drop check needs eval code → Phase 5.)
-- Gate before spending GPU hours on the full grid.
+### [x] Phase 4 — Sanity check (one tiny run)
+- 4-bit, 0% replay, MedQA, `--max_samples 500 --epochs 1`. PASSED ✅: quant check ✓,
+  loss dropped 27→21, W&B logged, adapter saved, peak GPU 3430 MB.
+- Surfaced + fixed D2: migrated SFTTrainer to the new trl API (SFTConfig, max_length,
+  processing_class) — the old API silently dropped batch size → CUDA OOM on T4.
 
-### [ ] Phase 5 — Fix evaluation code (before Phase 6)
-- `evaluate_forgetting.py` — argparse (B3), base-vs-adapter load (B4),
-  CSV first-write (B5), per-task few-shot (C2), baseline wiring (C5), lm-eval pin (D3).
-- Write `evaluate_task.py` from scratch (F1 for MedQA, ROUGE-L for Samsum).
+### [x] Phase 5 — Fix evaluation code
+- `evaluate_forgetting.py` rewritten ✅ — argparse (B3), base-vs-adapter load (B4),
+  CSV first-write (B5), per-task few-shot (C2), baseline wiring (C5), lm-eval API (D3).
+  GPU fixes: build `BitsAndBytesConfig` ourselves (transformers v5 dropped `load_in_4bit`),
+  load model once, `--batch_size 1` (Gemma-2's 256k-vocab logits OOM otherwise).
+- `evaluate_task.py` written from scratch ✅ — MedQA accuracy + macro-F1, Samsum ROUGE-L,
+  on the held-out test split. ⚠️ Known bug: crashes on >512-token prompts (Unsloth
+  fast-inference path) — length fix pending.
 
-### [ ] Phase 6 — Baseline forgetting (report "Week 2", most important result)
+### [ ] Phase 6 — Baseline forgetting (report "Week 2", most important result)  ← CURRENT
 - Run the 6 zero-replay runs (3 quant × 2 tasks, replay=0%).
 - Eval base model (pre-fine-tune) on MMLU/HellaSwag/ARC = reference point.
 - Compute Forgetting Score each. Expected: 4-bit FS > 8-bit FS > FP16 FS.
+- **Progress (2026-06-19):** 4-bit baseline ✅ (MMLU 49.97, saved to `baselines.json`).
+  Run 001 (4-bit MedQA 0%) training + forgetting ✅ → **FS 54.07** (general caps
+  collapsed to ~random across all 4 benchmarks). Task-eval pending the length fix.
+  Remaining: 2 baselines (8/16-bit) + 5 more zero-replay runs + their task scores.
+- Results live in `results/all_results.csv`, `results/baselines.json`, `results/LOGS.md`.
+- Speed lever for the campaign: add `--limit ~100` to the evals (~3 hrs → ~30 min each).
 
 ### [ ] Phase 7 — Replay experiments (report "Week 3")
 - Run remaining 24 runs (3 quant × 4 replay ratios × 2 tasks).
@@ -105,12 +115,14 @@ Severity: 🔴 blocker (crashes) · 🟠 correctness (wrong results) · 🟡 des
 | C4 | train.py | no peak-GPU-memory logging | ✅ fixed |
 | D1 | train.py | prompt template drift vs download | ✅ fixed |
 | B6 | train.py / run_experiment.sh | adapter path/name mismatch | ⬜ Phase 7 (shell side) |
-| D2 | train.py | trl version not pinned (API drift) | ⬜ Phase 4 (notebook install cell) |
-| B3 | evaluate_forgetting.py | no argparse/__main__ block | ⬜ Phase 5 |
-| B4 | evaluate_forgetting.py | `pretrained=` must be base, `peft=` adapter | ⬜ Phase 5 |
-| B5 | evaluate_forgetting.py | CSV first-write crashes (getsize) | ⬜ Phase 5 |
-| C2 | evaluate_forgetting.py | global few-shot breaks 0-shot tasks | ⬜ Phase 5 |
-| C5 | evaluate_forgetting.py | baseline MMLU never wired up | ⬜ Phase 5 |
-| D3 | evaluate_forgetting.py | lm-eval keys/version not pinned | ⬜ Phase 5 |
-| — | evaluate_task.py | does not exist — write from scratch | ⬜ Phase 5 |
+| D2 | train.py | trl API drift → migrated to SFTConfig/max_length/processing_class | ✅ fixed |
+| B3 | evaluate_forgetting.py | no argparse/__main__ block | ✅ fixed |
+| B4 | evaluate_forgetting.py | `pretrained=` must be base, `peft=` adapter | ✅ fixed |
+| B5 | evaluate_forgetting.py | CSV first-write crashes (getsize) | ✅ fixed |
+| C2 | evaluate_forgetting.py | global few-shot breaks 0-shot tasks | ✅ fixed |
+| C5 | evaluate_forgetting.py | baseline MMLU never wired up | ✅ fixed |
+| D3 | evaluate_forgetting.py | lm-eval keys/version not pinned | ✅ fixed |
+| E1 | evaluate_forgetting.py | transformers v5 dropped `load_in_4bit` → build BitsAndBytesConfig; batch_size 1 (vocab-logit OOM) | ✅ fixed |
+| — | evaluate_task.py | did not exist — written from scratch (F1 / ROUGE-L) | ✅ done |
+| E2 | evaluate_task.py | crashes on >512-token prompts (Unsloth fast-inference) | ⬜ length fix pending |
 | D4 | run_experiment.sh | 30 runs > Kaggle session wall; no resume/`set -e` | ⬜ Phase 7 |

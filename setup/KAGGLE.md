@@ -85,14 +85,49 @@ is large at 4-bit, so raise the batch size for speed:
 - If you ever hit CUDA OOM (likely only on 16-bit), add `--batch_size 1`.
 
 ### Evaluation (Phase 6+)
-First the per-quant baseline (no adapter), once per quant level:
+Always use `--batch_size 1` for evals — Gemma-2's ~256k-vocab logits OOM otherwise.
+
+First the per-quant baseline (no adapter), once per quant level. **The 4-bit baseline
+is already done and committed in `results/baselines.json`, so it never needs re-running.**
 ```python
-!python evaluate_forgetting.py --quant 4 --run baseline_4bit --limit 50
+!python evaluate_forgetting.py --quant 8 --run baseline_8bit --batch_size 1 --limit 100
 ```
 Then a fine-tuned run (reads the baseline, computes the Forgetting Score):
 ```python
 !python evaluate_forgetting.py --quant 4 --run gemma2b_4bit_replay0pct_medqa \
-    --adapter outputs/gemma2b_4bit_replay0pct_medqa/adapter --limit 50
+    --adapter outputs/gemma2b_4bit_replay0pct_medqa/adapter --batch_size 1 --limit 100
 ```
-`--limit` runs a quick subset; drop it for the full (slow) MMLU once verified.
-Results append to `results/all_results.csv`; baselines live in `results/baselines.json`.
+**Speed: keep `--limit ~100` on the real runs.** Full MMLU at batch 1 ≈ 3 hrs/eval;
+`--limit 100` (≈100 Qs/subject) drops it to ~30 min and stays within ~1-2% of the full
+score — negligible against the large forgetting signal. (Optionally re-run only the final
+headline numbers at full precision by dropping `--limit`.)
+
+Task performance (did it learn the task?) — accuracy/F1 for MedQA, ROUGE-L for Samsum:
+```python
+!python evaluate_task.py --task medqa --quant 4 --run gemma2b_4bit_replay0pct_medqa \
+    --adapter outputs/gemma2b_4bit_replay0pct_medqa/adapter
+```
+Results append to `results/all_results.csv` (forgetting) and `results/task_results.csv`
+(task); baselines live in `results/baselines.json`.
+
+---
+
+## Production workflow — background commits + persistence
+
+For long runs (a full train+eval chain is many hours), don't run live. Use
+**Save Version → "Save & Run All (Commit)"** (GPU T4 + Internet on): Kaggle runs the
+notebook headless up to ~12 hrs, independent of your browser, and saves the output
+when the **last cell finishes cleanly**. Caveats learned the hard way:
+- The ~12 hr wall is **per commit**. A full eval-heavy chain can take ~11 hrs — keep
+  `--limit` on so you don't risk the wall.
+- If a cell **errors**, the commit is marked failed — but the output saved so far
+  (adapters, CSVs) is usually still in the version. Keep that version until you've
+  re-run the failed cell.
+- To re-run just one cell (e.g. a fixed task-eval) cheaply: start a **fresh** commit
+  that **attaches the previous version's output** (Add Input → your notebook output)
+  so the saved adapter is at `/kaggle/input/...`, then run only that cell (~30-45 min).
+
+**Persistence — results must leave the session.** Re-cloning wipes `/kaggle/working`.
+The durable record is the git repo: after each run, copy the updated CSV rows + any new
+baseline into `results/` and **push**. Adapters stay in the Kaggle version output (too
+big for git); training curves stay in W&B. Per-run log links go in `results/LOGS.md`.

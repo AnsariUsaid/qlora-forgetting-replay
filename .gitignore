@@ -16,3 +16,4 @@ data/*.json
 
 # Local session-context dumps (personal notes, not part of the project)
 *-this-is-the-context-*.txt
+SESSION_HANDOFF.md
