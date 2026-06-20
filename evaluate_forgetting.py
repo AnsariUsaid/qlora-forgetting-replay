@@ -102,14 +102,19 @@ def _run_eval(lm, tasks, num_fewshot: int, limit):
 def evaluate_forgetting(quant_bits: int, run_name: str, csv_path: str,
                         base_model: str, adapter: str = None,
                         baseline_file: str = "results/baselines.json",
-                        batch_size: int = 4, limit=None) -> dict:
+                        batch_size: int = 4, limit=None, limit_general=1000) -> dict:
     is_baseline = adapter is None
     lm = load_eval_model(quant_bits, base_model, adapter, batch_size)
 
     # C2: MMLU is 5-shot; the commonsense tasks are 0-shot → two separate calls
     # (same loaded model reused for both).
+    # Two separate sample limits on purpose: MMLU is a GROUP of 57 sub-tasks, so
+    # `limit` is per-subject (limit=100 → ~5,700 Qs → already reliable). The other
+    # three are SINGLE tasks, so limit=100 means just 100 Qs each → too coarse to
+    # trust a small forgetting signal. `limit_general` (default 1000) gives them
+    # enough questions to cut that noise, without blowing up the huge MMLU eval.
     mmlu_res  = _run_eval(lm, ["mmlu"], 5, limit)
-    other_res = _run_eval(lm, list(ZERO_SHOT_TASKS), 0, limit)
+    other_res = _run_eval(lm, list(ZERO_SHOT_TASKS), 0, limit_general)
 
     scores = {"mmlu": _get_metric(mmlu_res, "mmlu", MMLU_METRIC)}
     for task, metric in ZERO_SHOT_TASKS.items():
@@ -185,12 +190,16 @@ if __name__ == "__main__":                                     # B3
     p.add_argument("--baseline_file", type=str, default="results/baselines.json")
     p.add_argument("--batch_size", type=int, default=4)
     p.add_argument("--limit", type=int, default=None,
-                   help="Examples per task (e.g. 50) for a quick sanity eval.")
+                   help="MMLU examples PER SUBJECT (57 subjects). e.g. 100 → ~5,700 Qs.")
+    p.add_argument("--limit_general", type=int, default=1000,
+                   help="Examples for hellaswag/winogrande/arc_easy (each a single "
+                        "task). Default 1000 to kill small-sample noise. Use the SAME "
+                        "value across all runs + baselines so they stay comparable.")
     args = p.parse_args()
 
     evaluate_forgetting(
         quant_bits=args.quant, run_name=args.run, csv_path=args.csv,
         base_model=args.base_model, adapter=args.adapter,
         baseline_file=args.baseline_file, batch_size=args.batch_size,
-        limit=args.limit,
+        limit=args.limit, limit_general=args.limit_general,
     )

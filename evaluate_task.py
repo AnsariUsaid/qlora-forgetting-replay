@@ -168,7 +168,9 @@ if __name__ == "__main__":
     p.add_argument("--task", type=str, required=True, choices=["medqa", "samsum"])
     p.add_argument("--quant", type=int, required=True, choices=[4, 8, 16])
     p.add_argument("--run", type=str, required=True, help="Name for the CSV row.")
-    p.add_argument("--adapter", type=str, required=True, help="Trained adapter path.")
+    p.add_argument("--adapter", type=str, default=None,
+                   help="Trained adapter path. OMIT to score the BASE (un-fine-tuned) "
+                        "model — the task baseline that shows how much fine-tuning added.")
     p.add_argument("--base_model", type=str, default="unsloth/Llama-3.2-3B")
     p.add_argument("--csv", type=str, default="results/task_results.csv")
     p.add_argument("--data_file", type=str, default=None,

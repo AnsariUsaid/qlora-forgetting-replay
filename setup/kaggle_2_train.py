@@ -3,29 +3,45 @@
 KAGGLE NOTEBOOK 2 — TRAINING + EVAL  (Accelerator: GPU T4,  Internet: ON)
 ================================================================================
 PURPOSE
-    Install the stack, log in to W&B, (re)build data/, then train one QLoRA
-    adapter and evaluate it two ways:
-        • forgetting  (evaluate_forgetting.py) — did it lose general knowledge?
-        • task        (evaluate_task.py)       — did it learn the task?
-    Base model = unsloth/Llama-3.2-3B. (Gemma-2 was dropped: it needs bf16, the
-    free T4 has none, so fp16 corrupted training — see results/failed-gemma/.)
+    Run ONE grid cell end to end: train a QLoRA adapter on a task, then measure
+        • forgetting  — did the model lose general knowledge?  (evaluate_forgetting.py)
+        • task skill  — did it learn the task, and how much did fine-tuning ADD?
+                        (evaluate_task.py, vs the base model's own task score)
+    Base model = unsloth/Llama-3.2-3B. (Gemma-2 was dropped — fp16 corruption on
+    T4; see results/failed-gemma/.)
 
-HOW TO USE
-    1. Create a Kaggle notebook, Accelerator = GPU T4, Internet = ON.
-    2. Add the Kaggle Secret WANDB_API_KEY  (Add-ons -> Secrets) — Cell 3 needs it.
-    3. Paste each CELL into its own notebook cell, run top to bottom.
-       Order matters on a cold start.
-    Cells 1-5 = setup + sanity. Cells 6-10 = one real run + its evals (the
-    Llama re-validation: 4-bit / MedQA / 0% replay). Vary the flags for the campaign.
+HOW THIS NOTEBOOK WORKS
+    Cells 1-4 = setup (always run). Cell 5 = CONFIG: set QUANT / REPLAY / TASK once
+    and every command below fills itself in (so the run name and the adapter path
+    can never drift apart). One Kaggle commit = one grid cell.
 
-LONG RUNS
-    Use Save Version -> "Save & Run All (Commit)" (GPU + Internet on): headless,
-    ~12h wall per commit. Keep --limit ~100 on the evals so you don't hit the wall.
+WHICH CELLS TO RUN FOR A COMMIT
+    • First run at a NEW quant level (e.g. first 4-bit run):
+        1,2,3,4, 5(config), 7(general baseline), 8(task baseline), 9,10,11, 12
+    • Later run at a quant you've ALREADY baselined AND pushed baselines.json for:
+        1,2,3,4, 5(config), 9,10,11, 12   (skip 7-8; the cloned repo already has them)
+    • Cell 6 (sanity) is OPTIONAL — only to debug the training loop. DELETE it for
+      a real commit so "Run All" doesn't waste time on it.
 
-PERSISTENCE
-    Re-cloning wipes /kaggle/working. After a run, copy results/all_results.csv,
-    results/task_results.csv and results/baselines.json back into the repo and push.
-    Adapters stay in the Kaggle version output (too big for git); curves stay in W&B.
+BASELINES (read this once)
+    - General-knowledge baseline (cell 7) is per-QUANT and is SAVED to
+      results/baselines.json. Cell 10 READS it to compute the Forgetting Score, so
+      it MUST exist. Re-cloning wipes /kaggle/working, so after the first run at a
+      quant, push baselines.json to the repo — then later same-quant commits clone
+      it and can skip cell 7.
+    - Task baseline (cell 8) is per-QUANT+TASK, base model with NO adapter. It's
+      informational (a CSV row showing the base score) — it doesn't gate anything,
+      so run it once per quant+task and keep the row.
+
+EVAL DEPTH (the "slow down, do it right" settings)
+    MMLU: --limit 100  (per subject × 57 ≈ 5,700 Qs, reliable).
+    hellaswag/winogrande/arc: --limit_general 1000  (kills small-sample noise).
+    Keep these the SAME on baselines AND fine-tuned runs or the numbers don't compare.
+
+LONG RUNS + PERSISTENCE
+    Use Save Version -> "Save & Run All (Commit)" (GPU + Internet on, ~12h wall).
+    After it finishes, download results/all_results.csv, results/task_results.csv,
+    results/baselines.json from the version Output, drop them into the repo, push.
 ================================================================================
 """
 
@@ -36,9 +52,7 @@ PERSISTENCE
 
 
 # ────────────────────────── CELL 2 — install the stack (~4 min) ───────────────
-# Deps are inlined here (the old setup/requirements.txt was removed so this file
-# is self-contained). Versions are loose; to lock the env, run `pip freeze` in a
-# WORKING session and pin the lines below.
+# Deps inlined (no requirements.txt). Versions loose; pin from a working pip freeze.
 !pip install -q unsloth transformers peft trl bitsandbytes accelerate datasets
 !pip install -q lm-eval evaluate rouge-score sacrebleu scikit-learn pandas wandb
 
@@ -51,48 +65,56 @@ wandb.login(key=UserSecretsClient().get_secret("WANDB_API_KEY"))
 
 
 # ──────────────── CELL 4 — (re)build data/ cloud-side (~1 min) ────────────────
-# Later this can be replaced by attaching Notebook 1's saved output read-only.
 !python data/download_datasets.py
 
 
-# ───────────────── CELL 5 — SANITY run (tiny: 500 samples, 1 epoch) ───────────
-# Confirms the loop works end to end. WATCH THE LOSS: Llama-3.2-3B starts well
-# below 1 and descends. If it sits ~20+ (above the random ceiling), something is
-# wrong — stop and investigate before burning a full run.
-!python train.py --quant 4 --replay 0.0 --task medqa --max_samples 500 --epochs 1
-
-
 # ════════════════════════════════════════════════════════════════════════════
-#   REAL RUN — Llama re-validation: 4-bit / MedQA / 0% replay
-#   Campaign knobs:  --quant 4|8|16   --replay 0.0 0.05 0.10 0.20 0.30   --task medqa|samsum
-#   If you hit CUDA OOM (most likely on 16-bit): add  --batch_size 1
+# CELL 5 — CONFIG  ◀── the ONLY cell you edit between runs. Set 3 values.
 # ════════════════════════════════════════════════════════════════════════════
+QUANT  = 4          # 4 | 8 | 16
+REPLAY = 0.0        # 0.0 | 0.05 | 0.10 | 0.20 | 0.30
+TASK   = "medqa"    # medqa | samsum
 
-# ───────── CELL 6 — TRAIN (full: 3 epochs default; batch up for 4-bit speed) ──
-!python train.py --quant 4 --replay 0.0 --task medqa --batch_size 8
-
-
-# ───────── CELL 7 — FORGETTING baseline (per quant, ONCE, NO adapter) ─────────
-# No Llama baselines exist yet — run this once per quant level before its
-# fine-tuned runs. --limit 100 keeps it ~30 min (full MMLU ≈ 3h). batch_size 1
-# to stay safe on GPU memory.
-!python evaluate_forgetting.py --quant 4 --run baseline_4bit --batch_size 1 --limit 100
+RUN = f"llama3b_{QUANT}bit_replay{int(REPLAY*100)}pct_{TASK}"
+print("This run  :", RUN)
+print("Adapter   :", f"outputs/{RUN}/adapter")
+print("Eval depth: MMLU --limit 100 | general --limit_general 1000")
 
 
-# ─────── CELL 8 — FORGETTING of the fine-tuned adapter (reads baseline -> FS) ──
-!python evaluate_forgetting.py --quant 4 --run llama3b_4bit_replay0pct_medqa \
-    --adapter outputs/llama3b_4bit_replay0pct_medqa/adapter --batch_size 1 --limit 100
+# ───── CELL 6 — OPTIONAL sanity (tiny: 500 samples, 1 epoch). DELETE for a commit ─────
+# Only to confirm the training loop works. Watch the loss DROP below ~1 (Llama is
+# healthy; a stuck ~20 would mean trouble). Overwrites the real adapter path, so
+# never keep this in the same commit as cell 9.
+!python train.py --quant {QUANT} --replay {REPLAY} --task {TASK} --max_samples 500 --epochs 1
 
 
-# ──────────────── CELL 9 — TASK performance (did it learn MedQA?) ─────────────
-# Uses the new letter-logit scoring. CONFIRM: predictions spread across A/B/C/D
-# (not always one letter) and accuracy is real (well above 25% chance).
-!python evaluate_task.py --task medqa --quant 4 --run llama3b_4bit_replay0pct_medqa \
-    --adapter outputs/llama3b_4bit_replay0pct_medqa/adapter --limit 100
+# ════════════════════════ BASELINES (base model, NO adapter) ════════════════════════
+
+# ── CELL 7 — GENERAL-KNOWLEDGE baseline — run ONCE per QUANT, then push baselines.json ──
+# Saves MMLU/hellaswag/winogrande/arc for this quant as the reference for FS.
+!python evaluate_forgetting.py --quant {QUANT} --run baseline_{QUANT}bit --batch_size 1 --limit 100 --limit_general 1000
+
+# ── CELL 8 — TASK baseline (base model on the task) — run ONCE per QUANT+TASK ──
+# How well the UN-fine-tuned model already does the task → fine-tuning's lift =
+# (cell 11 score − this). MedQA: letter-logit accuracy/F1. Samsum: ROUGE-L.
+!python evaluate_task.py --task {TASK} --quant {QUANT} --run base_{QUANT}bit_{TASK} --limit 100
 
 
-# ─────────────── CELL 10 — show results (then copy out + push) ────────────────
-!cat results/all_results.csv
-!echo "---"
-!cat results/baselines.json
-# Copy results/*.csv + baselines.json back into the repo and push from your laptop.
+# ════════════════════════════════ THE RUN ════════════════════════════════════
+
+# ───────────────── CELL 9 — TRAIN the adapter (~3h for a full task) ───────────
+# 4-bit has GPU headroom → batch 8 for speed. Add --batch_size 1 if 16-bit OOMs.
+!python train.py --quant {QUANT} --replay {REPLAY} --task {TASK} --batch_size 8
+
+# ──────────── CELL 10 — FORGETTING of the fine-tuned adapter (reads baseline -> FS) ──
+!python evaluate_forgetting.py --quant {QUANT} --run {RUN} --adapter outputs/{RUN}/adapter --batch_size 1 --limit 100 --limit_general 1000
+
+# ─────────────── CELL 11 — TASK performance of the fine-tuned adapter ─────────
+!python evaluate_task.py --task {TASK} --quant {QUANT} --run {RUN} --adapter outputs/{RUN}/adapter --limit 100
+
+
+# ─────────────── CELL 12 — show results (then download + push to repo) ────────
+!echo "=== all_results.csv (forgetting) ===" ; cat results/all_results.csv
+!echo "" ; echo "=== task_results.csv (task skill + base baseline) ===" ; cat results/task_results.csv
+!echo "" ; echo "=== baselines.json (per-quant general baseline) ===" ; cat results/baselines.json
+# Persist: download these 3 files from the version Output -> repo -> commit -> push.
