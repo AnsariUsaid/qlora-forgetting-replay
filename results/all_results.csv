@@ -1,3 +1,1 @@
 run,quant_bits,mode,mmlu,hellaswag,winogrande,arc_easy,avg_general,forgetting_score
-baseline_4bit,4,baseline,49.97,71.56,69.3,78.58,67.35,0.0
-gemma2b_4bit_replay0pct_medqa,4,finetuned,22.95,26.04,52.8,24.49,31.57,54.07

@@ -72,21 +72,43 @@ def generate(model, tokenizer, instruction: str, inp: str, max_new_tokens: int) 
     return gen.strip()
 
 
+LETTERS = ["A", "B", "C", "D"]
+
+
 def _extract_letter(text: str) -> str:
-    """First A-D in the text (the model emits 'A) ...'); '' if none found."""
+    """First A-D in the text (gold answers are 'A) ...'); '' if none found."""
     m = re.search(r"[ABCD]", text.upper())
     return m.group(0) if m else ""
 
 
+def _letter_token_ids(tokenizer):
+    """First token id of each option letter A-D. The trained completion starts
+    with the letter ('A) ...'), so the model's whole answer is decided by the
+    very first token it would emit after the prompt."""
+    return [tokenizer.encode(L, add_special_tokens=False)[0] for L in LETTERS]
+
+
 def score_medqa(data, model, tokenizer) -> dict:
+    """Letter-logit scoring (replaces generate-then-regex): read the model's
+    A/B/C/D logits at the answer position and take the argmax. Deterministic —
+    no decoding fragility (empty output, wrong letter, 'always-A'), and every
+    example yields a real A-D prediction so the accuracy actually discriminates."""
+    import torch
     from sklearn.metrics import accuracy_score, f1_score
+
+    letter_ids = _letter_token_ids(tokenizer)
     gold, pred = [], []
     for ex in data:
         gold.append(_extract_letter(ex["output"]))               # "A) ..." → "A"
-        out = generate(model, tokenizer, ex["instruction"], ex["input"], 16)
-        pred.append(_extract_letter(out) or "?")                 # ? = unparseable
+        prompt = INFER_PROMPT.format(instruction=ex["instruction"], input=ex["input"])
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
+                           max_length=MAX_SEQ_LEN).to(model.device)
+        with torch.no_grad():
+            logits = model(**inputs).logits[0, -1, :]            # next-token logits
+        choice = int(torch.argmax(logits[letter_ids]))           # 0..3 → A..D
+        pred.append(LETTERS[choice])
     acc = accuracy_score(gold, pred)
-    f1 = f1_score(gold, pred, average="macro", labels=list("ABCD"), zero_division=0)
+    f1 = f1_score(gold, pred, average="macro", labels=LETTERS, zero_division=0)
     return {"accuracy": round(acc * 100, 2), "macro_f1": round(f1 * 100, 2)}
 
 
@@ -147,7 +169,7 @@ if __name__ == "__main__":
     p.add_argument("--quant", type=int, required=True, choices=[4, 8, 16])
     p.add_argument("--run", type=str, required=True, help="Name for the CSV row.")
     p.add_argument("--adapter", type=str, required=True, help="Trained adapter path.")
-    p.add_argument("--base_model", type=str, default="unsloth/gemma-2-2b")
+    p.add_argument("--base_model", type=str, default="unsloth/Llama-3.2-3B")
     p.add_argument("--csv", type=str, default="results/task_results.csv")
     p.add_argument("--data_file", type=str, default=None,
                    help="Defaults to data/<task>_test.json (held-out split).")

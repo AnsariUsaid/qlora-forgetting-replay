@@ -53,13 +53,17 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
                    batch_size: int = 2, grad_accum: int = 8):
     # ── Config ─────────────────────────────────────────────────────
     # Effective batch = batch_size * grad_accum = 16 (T4-safe defaults).
-    MODEL_NAME = "unsloth/gemma-2-2b"   # full-precision (BF16) base; quantize at load
+    MODEL_NAME = "unsloth/Llama-3.2-3B"  # full-precision base; quantize at load.
+    # Switched off gemma-2-2b: it needs bf16/fp32, but the free T4 has no bf16, so
+    # Unsloth fell back to fp16 and Gemma-2's soft-capping overflowed fp16 →
+    # corrupted training (loss stuck ~21, worse than random). Llama-3.2-3B has no
+    # soft-capping → numerically fine in fp16 on a T4.
     MAX_SEQ_LEN = 512
     LORA_RANK = 16
     LORA_ALPHA = 32
     LR = 2e-4
 
-    run_name = f"gemma2b_{quant_bits}bit_replay{int(replay_ratio*100)}pct_{task}"
+    run_name = f"llama3b_{quant_bits}bit_replay{int(replay_ratio*100)}pct_{task}"
     wandb.init(project="qlora-forgetting", name=run_name,
                config=dict(quant_bits=quant_bits, replay_ratio=replay_ratio,
                             task=task, lora_rank=LORA_RANK, epochs=epochs,

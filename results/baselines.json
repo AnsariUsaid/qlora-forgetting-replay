@@ -1,9 +1,1 @@
-{
-  "4": {
-    "mmlu": 49.97,
-    "hellaswag": 71.56,
-    "winogrande": 69.3,
-    "arc_easy": 78.58,
-    "avg_general": 67.35
-  }
-}
+{}

@@ -180,7 +180,7 @@ if __name__ == "__main__":                                     # B3
     p.add_argument("--run", type=str, required=True, help="Name for the CSV row.")
     p.add_argument("--adapter", type=str, default=None,
                    help="Adapter path. OMIT for a baseline (no fine-tuning) eval.")
-    p.add_argument("--base_model", type=str, default="unsloth/gemma-2-2b")
+    p.add_argument("--base_model", type=str, default="unsloth/Llama-3.2-3B")
     p.add_argument("--csv", type=str, default="results/all_results.csv")
     p.add_argument("--baseline_file", type=str, default="results/baselines.json")
     p.add_argument("--batch_size", type=int, default=4)
