@@ -1,0 +1,9 @@
+{
+  "run": "llama3b_4bit_replay0pct_samsum",
+  "task": "samsum",
+  "quant_bits": 4,
+  "n_eval": 100,
+  "accuracy": "",
+  "macro_f1": "",
+  "rougeL": 45.03
+}

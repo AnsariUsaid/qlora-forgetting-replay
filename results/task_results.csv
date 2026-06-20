@@ -1,0 +1,4 @@
+run,task,quant_bits,n_eval,accuracy,macro_f1,rougeL
+llama3b_4bit_replay0pct_medqa,medqa,4,100,53.0,52.61,
+base_4bit_samsum,samsum,4,100,,,17.66
+llama3b_4bit_replay0pct_samsum,samsum,4,100,,,45.03

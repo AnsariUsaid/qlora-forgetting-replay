@@ -5,17 +5,18 @@ This answers "did the model actually learn the task?" — the complement to
 evaluate_forgetting.py ("did it forget general knowledge?"). A good result needs
 BOTH: high task score AND low forgetting.
 
-  • MedQA  (multiple-choice): generate an answer, extract the chosen letter A-D,
-            score accuracy + macro-F1 vs the gold letter.
+  • MedQA  (multiple-choice): read the model's A-D answer-token logits and take the
+            argmax (no text generation); score accuracy + macro-F1 vs the gold letter.
   • Samsum (summarization):    generate a summary, score ROUGE-L vs the reference.
 
 Evaluated on the HELD-OUT TEST split (data/{task}_test.json) — never the training
 data, or the score would be meaningless (memorisation, not learning).
 
-Loads the SAME base model at the SAME quant level as training, with the adapter
-on top, so the measured model matches what was trained.
+Loads the SAME base model at the SAME quant level as training. With --adapter the
+fine-tuned model is measured; WITHOUT it the bare base model is measured (the task
+baseline, so we can see how much fine-tuning added).
 """
-import os, json, csv, re, argparse
+import os, json, re, argparse
 
 # Inference context length. Set well above the training max (512) so long MedQA
 # vignettes / Samsum dialogues are never trimmed into the model — an over-length
@@ -122,7 +123,7 @@ def score_samsum(data, model, tokenizer) -> dict:
     return {"rougeL": round(total / len(data) * 100, 2)}
 
 
-def evaluate_task(task: str, quant_bits: int, run_name: str, csv_path: str,
+def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
                   base_model: str, adapter: str,
                   data_file: str = None, limit: int = None) -> dict:
     data_file = data_file or f"data/{task}_test.json"
@@ -140,7 +141,7 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, csv_path: str,
     else:
         raise ValueError(f"Unknown task '{task}' (expected medqa or samsum).")
 
-    # Unified CSV schema across tasks (irrelevant columns left blank).
+    # Unified schema across tasks (irrelevant fields left blank).
     row = {
         "run": run_name,
         "task": task,
@@ -151,13 +152,12 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, csv_path: str,
         "rougeL": metrics.get("rougeL", ""),
     }
 
-    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
-    file_ready = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
-    with open(csv_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=row.keys())
-        if not file_ready:
-            writer.writeheader()
-        writer.writerow(row)
+    # Per-run source of truth (see evaluate_forgetting.py): write to this run's own
+    # folder; the master task_results.csv is rebuilt from these by aggregate_results.py.
+    run_path = os.path.join(runs_dir, run_name)
+    os.makedirs(run_path, exist_ok=True)
+    with open(os.path.join(run_path, "task.json"), "w") as f:
+        json.dump(row, f, indent=2)
 
     print(f"[Task Eval] {run_name} ({task}, n={len(data)}) → {metrics}")
     return row
@@ -167,12 +167,15 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--task", type=str, required=True, choices=["medqa", "samsum"])
     p.add_argument("--quant", type=int, required=True, choices=[4, 8, 16])
-    p.add_argument("--run", type=str, required=True, help="Name for the CSV row.")
+    p.add_argument("--run", type=str, required=True,
+                   help="Run name (also the per-run output folder name).")
     p.add_argument("--adapter", type=str, default=None,
                    help="Trained adapter path. OMIT to score the BASE (un-fine-tuned) "
                         "model — the task baseline that shows how much fine-tuning added.")
     p.add_argument("--base_model", type=str, default="unsloth/Llama-3.2-3B")
-    p.add_argument("--csv", type=str, default="results/task_results.csv")
+    p.add_argument("--runs_dir", type=str, default="results/runs",
+                   help="Per-run output: <runs_dir>/<run>/task.json. "
+                        "Rebuild results/task_results.csv with aggregate_results.py.")
     p.add_argument("--data_file", type=str, default=None,
                    help="Defaults to data/<task>_test.json (held-out split).")
     p.add_argument("--limit", type=int, default=None,
@@ -181,6 +184,6 @@ if __name__ == "__main__":
 
     evaluate_task(
         task=args.task, quant_bits=args.quant, run_name=args.run,
-        csv_path=args.csv, base_model=args.base_model, adapter=args.adapter,
+        runs_dir=args.runs_dir, base_model=args.base_model, adapter=args.adapter,
         data_file=args.data_file, limit=args.limit,
     )

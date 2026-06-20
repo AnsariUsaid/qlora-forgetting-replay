@@ -38,10 +38,12 @@ EVAL DEPTH (the "slow down, do it right" settings)
     hellaswag/winogrande/arc: --limit_general 1000  (kills small-sample noise).
     Keep these the SAME on baselines AND fine-tuned runs or the numbers don't compare.
 
-LONG RUNS + PERSISTENCE
+LONG RUNS + PERSISTENCE (per-run folders — no manual CSV merging)
     Use Save Version -> "Save & Run All (Commit)" (GPU + Internet on, ~12h wall).
-    After it finishes, download results/all_results.csv, results/task_results.csv,
-    results/baselines.json from the version Output, drop them into the repo, push.
+    Each run writes results/runs/<run>/ (forgetting.json + task.json). After it
+    finishes, download THAT folder + results/baselines.json from the version Output,
+    drop them in the repo, run `python aggregate_results.py` locally to rebuild the
+    master CSVs, then push. (The CSVs are always rebuilt from runs/ — never hand-edited.)
 ================================================================================
 """
 
@@ -113,8 +115,10 @@ print("Eval depth: MMLU --limit 100 | general --limit_general 1000")
 !python evaluate_task.py --task {TASK} --quant {QUANT} --run {RUN} --adapter outputs/{RUN}/adapter --limit 100
 
 
-# ─────────────── CELL 12 — show results (then download + push to repo) ────────
-!echo "=== all_results.csv (forgetting) ===" ; cat results/all_results.csv
+# ──────────── CELL 12 — rebuild master tables + show (then persist) ───────────
+!python aggregate_results.py
+!echo "" ; echo "=== all_results.csv (forgetting) ===" ; cat results/all_results.csv
 !echo "" ; echo "=== task_results.csv (task skill + base baseline) ===" ; cat results/task_results.csv
 !echo "" ; echo "=== baselines.json (per-quant general baseline) ===" ; cat results/baselines.json
-# Persist: download these 3 files from the version Output -> repo -> commit -> push.
+# Persist: download results/runs/{this run}/ + results/baselines.json from the version
+# Output -> drop in repo -> `python aggregate_results.py` -> commit -> push.

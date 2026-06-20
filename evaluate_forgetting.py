@@ -12,7 +12,7 @@ Two modes (chosen by whether --adapter is given):
   • baseline  (no --adapter): eval the un-fine-tuned base model at this quant
                 level, SAVE its scores as the reference for this quant level.
   • finetuned (with --adapter): eval base+adapter, READ the matching baseline,
-                compute FS, append everything to the results CSV.
+                compute FS, write everything to this run's folder (results/runs/<run>/).
 
 Fixes over starter-asis:
   B3 real argparse/__main__ so the script actually runs when called.
@@ -24,7 +24,7 @@ Fixes over starter-asis:
      results file whose name/location changes between versions; read metric keys
      defensively.
 """
-import os, json, csv, argparse
+import os, json, argparse
 
 # General-capability probes. MMLU is the headline (world knowledge); the other
 # three are commonsense/reasoning. Each maps to the metric key lm-eval reports.
@@ -99,7 +99,7 @@ def _run_eval(lm, tasks, num_fewshot: int, limit):
     )
 
 
-def evaluate_forgetting(quant_bits: int, run_name: str, csv_path: str,
+def evaluate_forgetting(quant_bits: int, run_name: str, runs_dir: str,
                         base_model: str, adapter: str = None,
                         baseline_file: str = "results/baselines.json",
                         batch_size: int = 4, limit=None, limit_general=1000) -> dict:
@@ -161,15 +161,13 @@ def evaluate_forgetting(quant_bits: int, run_name: str, csv_path: str,
         "forgetting_score": round(fs, 2),
     }
 
-    # B5: only write the header when the file is new/empty (don't getsize a
-    # file that doesn't exist yet).
-    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
-    file_ready = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
-    with open(csv_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=row.keys())
-        if not file_ready:
-            writer.writeheader()
-        writer.writerow(row)
+    # Per-run source of truth: write this run's row to its OWN folder. The master
+    # CSVs are rebuilt from these by aggregate_results.py — never hand-merged. So
+    # each Kaggle commit writes only its own folder (no clobber, no manual merge).
+    run_path = os.path.join(runs_dir, run_name)
+    os.makedirs(run_path, exist_ok=True)
+    with open(os.path.join(run_path, "forgetting.json"), "w") as f:
+        json.dump(row, f, indent=2)
 
     return row
 
@@ -182,11 +180,14 @@ def compute_forgetting_score(baseline_mmlu: float, finetuned_mmlu: float) -> flo
 if __name__ == "__main__":                                     # B3
     p = argparse.ArgumentParser()
     p.add_argument("--quant", type=int, required=True, choices=[4, 8, 16])
-    p.add_argument("--run", type=str, required=True, help="Name for the CSV row.")
+    p.add_argument("--run", type=str, required=True,
+                   help="Run name (also the per-run output folder name).")
     p.add_argument("--adapter", type=str, default=None,
                    help="Adapter path. OMIT for a baseline (no fine-tuning) eval.")
     p.add_argument("--base_model", type=str, default="unsloth/Llama-3.2-3B")
-    p.add_argument("--csv", type=str, default="results/all_results.csv")
+    p.add_argument("--runs_dir", type=str, default="results/runs",
+                   help="Per-run output: <runs_dir>/<run>/forgetting.json. "
+                        "Rebuild results/all_results.csv with aggregate_results.py.")
     p.add_argument("--baseline_file", type=str, default="results/baselines.json")
     p.add_argument("--batch_size", type=int, default=4)
     p.add_argument("--limit", type=int, default=None,
@@ -198,7 +199,7 @@ if __name__ == "__main__":                                     # B3
     args = p.parse_args()
 
     evaluate_forgetting(
-        quant_bits=args.quant, run_name=args.run, csv_path=args.csv,
+        quant_bits=args.quant, run_name=args.run, runs_dir=args.runs_dir,
         base_model=args.base_model, adapter=args.adapter,
         baseline_file=args.baseline_file, batch_size=args.batch_size,
         limit=args.limit, limit_general=args.limit_general,

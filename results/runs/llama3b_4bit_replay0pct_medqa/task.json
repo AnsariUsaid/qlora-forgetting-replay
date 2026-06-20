@@ -1,0 +1,9 @@
+{
+  "run": "llama3b_4bit_replay0pct_medqa",
+  "task": "medqa",
+  "quant_bits": 4,
+  "n_eval": 100,
+  "accuracy": 53.0,
+  "macro_f1": 52.61,
+  "rougeL": ""
+}
