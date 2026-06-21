@@ -1,6 +1,8 @@
 run,quant_bits,mode,mmlu,hellaswag,winogrande,arc_easy,avg_general,forgetting_score
 baseline_4bit,4,baseline,55.98,63.9,69.0,72.7,65.4,0.0
 baseline_8bit,8,baseline,57.7,64.8,68.2,72.0,65.68,0.0
+baseline_16bit,16,baseline,57.74,65.0,68.9,72.3,65.98,0.0
 llama3b_4bit_replay0pct_medqa,4,finetuned,56.72,68.0,67.0,76.0,66.93,-1.32
 llama3b_4bit_replay0pct_samsum,4,finetuned,53.56,65.9,68.4,73.8,65.42,4.32
 llama3b_8bit_replay0pct_samsum,8,finetuned,55.72,65.0,67.8,74.7,65.8,3.43
+llama3b_16bit_replay0pct_samsum,16,finetuned,56.72,66.4,69.3,76.2,67.15,1.77

@@ -1,0 +1,11 @@
+{
+  "run": "baseline_16bit",
+  "quant_bits": 16,
+  "mode": "baseline",
+  "mmlu": 57.74,
+  "hellaswag": 65.0,
+  "winogrande": 68.9,
+  "arc_easy": 72.3,
+  "avg_general": 65.98,
+  "forgetting_score": 0.0
+}

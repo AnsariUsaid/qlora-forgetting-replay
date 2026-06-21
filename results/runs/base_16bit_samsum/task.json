@@ -1,0 +1,9 @@
+{
+  "run": "base_16bit_samsum",
+  "task": "samsum",
+  "quant_bits": 16,
+  "n_eval": 100,
+  "accuracy": "",
+  "macro_f1": "",
+  "rougeL": 15.28
+}
