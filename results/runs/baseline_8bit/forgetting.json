@@ -1,0 +1,11 @@
+{
+  "run": "baseline_8bit",
+  "quant_bits": 8,
+  "mode": "baseline",
+  "mmlu": 57.7,
+  "hellaswag": 64.8,
+  "winogrande": 68.2,
+  "arc_easy": 72.0,
+  "avg_general": 65.68,
+  "forgetting_score": 0.0
+}
