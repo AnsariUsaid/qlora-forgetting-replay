@@ -11,13 +11,16 @@ its own folder; re-running this rebuilds the tables.
 """
 import os, json, csv, glob
 
-RUNS_DIR   = "results/runs"
-FORGET_CSV = "results/all_results.csv"
-TASK_CSV   = "results/task_results.csv"
+RUNS_DIR    = "results/runs"
+FORGET_CSV  = "results/all_results.csv"
+TASK_CSV    = "results/task_results.csv"
+BASELINES   = "results/baselines.json"
 
 FORGET_COLS = ["run", "quant_bits", "mode", "mmlu", "hellaswag", "winogrande",
                "arc_easy", "avg_general", "forgetting_score"]
 TASK_COLS   = ["run", "task", "quant_bits", "n_eval", "accuracy", "macro_f1", "rougeL"]
+# Fields evaluate_forgetting.py reads back from baselines.json to compute FS.
+BASELINE_FIELDS = ["mmlu", "hellaswag", "winogrande", "arc_easy", "avg_general"]
 
 
 def _collect(filename):
@@ -47,8 +50,18 @@ def main():
                              r.get("task", ""), r.get("run", "")))
     _write_csv(FORGET_CSV, FORGET_COLS, forget)
     _write_csv(TASK_CSV, TASK_COLS, task)
+
+    # Rebuild baselines.json from the baseline_* runs so it's always complete (one
+    # entry per quant level). evaluate_forgetting.py reads this to compute FS, so a
+    # missing entry would crash a fine-tuned run. Deriving it here removes that gap.
+    store = {str(r["quant_bits"]): {k: r[k] for k in BASELINE_FIELDS}
+             for r in forget if r.get("mode") == "baseline"}
+    with open(BASELINES, "w") as f:
+        json.dump(store, f, indent=2)
+
     print(f"Aggregated {len(forget)} forgetting rows -> {FORGET_CSV}")
     print(f"Aggregated {len(task)} task rows -> {TASK_CSV}")
+    print(f"Rebuilt {len(store)} baselines ({', '.join(sorted(store))}-bit) -> {BASELINES}")
 
 
 if __name__ == "__main__":
