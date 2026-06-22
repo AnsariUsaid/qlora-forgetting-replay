@@ -5,5 +5,6 @@ llama3b_4bit_replay0pct_samsum,samsum,4,100,,,45.03
 llama3b_4bit_replay10pct_samsum,samsum,4,100,,,44.47
 base_8bit_samsum,samsum,8,100,,,15.3
 llama3b_8bit_replay0pct_samsum,samsum,8,100,,,45.63
+llama3b_8bit_replay10pct_samsum,samsum,8,100,,,45.62
 base_16bit_samsum,samsum,16,100,,,15.28
 llama3b_16bit_replay0pct_samsum,samsum,16,100,,,46.57
