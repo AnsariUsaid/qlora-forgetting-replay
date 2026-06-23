@@ -8,3 +8,4 @@ llama3b_4bit_replay10pct_samsum,4,finetuned,54.56,65.9,69.1,74.9,66.12,2.54
 llama3b_8bit_replay0pct_samsum,8,finetuned,55.72,65.0,67.8,74.7,65.8,3.43
 llama3b_8bit_replay10pct_samsum,8,finetuned,56.56,64.2,70.5,75.2,66.62,1.98
 llama3b_16bit_replay0pct_samsum,16,finetuned,56.72,66.4,69.3,76.2,67.15,1.77
+llama3b_16bit_replay10pct_samsum,16,finetuned,57.14,66.1,71.0,74.6,67.21,1.04
