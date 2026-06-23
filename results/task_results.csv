@@ -3,6 +3,7 @@ llama3b_4bit_replay0pct_medqa,medqa,4,100,53.0,52.61,
 base_4bit_samsum,samsum,4,100,,,17.66
 llama3b_4bit_replay0pct_samsum,samsum,4,100,,,45.03
 llama3b_4bit_replay10pct_samsum,samsum,4,100,,,44.47
+llama3b_4bit_replay20pct_samsum,samsum,4,100,,,44.9
 base_8bit_samsum,samsum,8,100,,,15.3
 llama3b_8bit_replay0pct_samsum,samsum,8,100,,,45.63
 llama3b_8bit_replay10pct_samsum,samsum,8,100,,,45.62
