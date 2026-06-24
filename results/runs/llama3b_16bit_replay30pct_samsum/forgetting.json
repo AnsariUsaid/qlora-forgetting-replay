@@ -1,0 +1,11 @@
+{
+  "run": "llama3b_16bit_replay30pct_samsum",
+  "quant_bits": 16,
+  "mode": "finetuned",
+  "mmlu": 56.91,
+  "hellaswag": 66.7,
+  "winogrande": 69.1,
+  "arc_easy": 76.7,
+  "avg_general": 67.35,
+  "forgetting_score": 1.44
+}
