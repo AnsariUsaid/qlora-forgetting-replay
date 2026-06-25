@@ -123,6 +123,28 @@ def score_samsum(data, model, tokenizer) -> dict:
     return {"rougeL": round(total / len(data) * 100, 2)}
 
 
+def _normalize_sql(q: str) -> str:
+    """Canonicalize so trivially-different-but-equivalent queries compare equal:
+    lowercase, strip, drop trailing ';', collapse whitespace, no spaces around ( ) ,.
+    Avoids unfairly penalising formatting differences in raw string exact-match."""
+    q = q.strip().rstrip(";").lower()
+    q = re.sub(r"\s+", " ", q)               # collapse runs of whitespace
+    q = re.sub(r"\s*([(),])\s*", r"\1", q)   # no spaces around parens / commas
+    return q.strip()
+
+
+def score_sql(data, model, tokenizer) -> dict:
+    """Generate a SQL query and normalized-exact-match it against the gold query.
+    Deterministic and DB-free (consistent with the letter-logit MedQA choice)."""
+    correct = 0
+    for ex in data:
+        out = generate(model, tokenizer, ex["instruction"], ex["input"], 128)
+        pred = out.splitlines()[0] if out else ""   # first line; ignore trailing chatter
+        if _normalize_sql(pred) == _normalize_sql(ex["output"]):
+            correct += 1
+    return {"exact_match": round(correct / len(data) * 100, 2)}
+
+
 def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
                   base_model: str, adapter: str,
                   data_file: str = None, limit: int = None) -> dict:
@@ -138,8 +160,10 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
         metrics = score_medqa(data, model, tokenizer)
     elif task == "samsum":
         metrics = score_samsum(data, model, tokenizer)
+    elif task == "sql":
+        metrics = score_sql(data, model, tokenizer)
     else:
-        raise ValueError(f"Unknown task '{task}' (expected medqa or samsum).")
+        raise ValueError(f"Unknown task '{task}' (expected medqa, samsum or sql).")
 
     # Unified schema across tasks (irrelevant fields left blank).
     row = {
@@ -150,6 +174,7 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
         "accuracy": metrics.get("accuracy", ""),
         "macro_f1": metrics.get("macro_f1", ""),
         "rougeL": metrics.get("rougeL", ""),
+        "exact_match": metrics.get("exact_match", ""),
     }
 
     # Per-run source of truth (see evaluate_forgetting.py): write to this run's own
@@ -165,7 +190,7 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--task", type=str, required=True, choices=["medqa", "samsum"])
+    p.add_argument("--task", type=str, required=True, choices=["medqa", "samsum", "sql"])
     p.add_argument("--quant", type=int, required=True, choices=[4, 8, 16])
     p.add_argument("--run", type=str, required=True,
                    help="Run name (also the per-run output folder name).")

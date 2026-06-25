@@ -16,13 +16,14 @@ Fixes applied on top of starter-asis (report §8.1):
       exact-match on the "A)" prefix (see evaluate_task.py, Week 2).
 """
 from datasets import load_dataset
-import json, os
+import json, os, random
 
 # ── Download datasets (all Parquet / script-free, work on datasets v4+) ──
 medqa  = load_dataset("GBaker/MedQA-USMLE-4-options")   # ~10,178 train
 samsum = load_dataset("knkarthick/samsum")              # 14,732 train
 alpaca = load_dataset("yahma/alpaca-cleaned")
 dolly  = load_dataset("databricks/databricks-dolly-15k")
+sql    = load_dataset("b-mc2/sql-create-context")       # ~78,577 train ONLY (no test split)
 
 # ── Format MedQA into instruction format ───────────────────────
 # Source schema (GBaker/MedQA-USMLE-4-options):
@@ -64,6 +65,18 @@ def format_dolly(example):
         "output": example["response"],
     }
 
+# ── Format SQL (text-to-SQL) into instruction format ───────────
+# Source schema (b-mc2/sql-create-context):
+#   question (NL ask), context (CREATE TABLE schema), answer (the gold SQL query)
+# A structured/code-like task → expected to be MORE domain-divergent than Samsum,
+# so a stronger forgetting probe (and tests whether replay hurts rigid-syntax tasks).
+def format_sql(example):
+    return {
+        "instruction": "Write a SQL query that answers the question, using the given database schema.",
+        "input": f"Schema: {example['context']}\nQuestion: {example['question']}",
+        "output": example["answer"],
+    }
+
 # ── Format and save ─────────────────────────────────────────────
 os.makedirs("data", exist_ok=True)  # B2
 
@@ -90,8 +103,21 @@ with open("data/medqa_test.json", "w") as f:
 with open("data/samsum_test.json", "w") as f:
     json.dump(samsum_test, f)
 
+# SQL ships ONLY a train split, so carve out our own held-out test (seed 42, like
+# every other split here). Subsample to ~10k train to match MedQA/Samsum scale, so
+# dataset size isn't an extra variable when comparing forgetting across tasks.
+sql_all = [format_sql(x) for x in sql["train"]]
+random.Random(42).shuffle(sql_all)
+sql_test  = sql_all[:1000]
+sql_train = sql_all[1000:11000]
+with open("data/sql_train.json", "w") as f:
+    json.dump(sql_train, f)
+with open("data/sql_test.json", "w") as f:
+    json.dump(sql_test, f)
+
 print(f"MedQA:  {len(medqa_formatted)} train / {len(medqa_test)} test")
 print(f"Samsum: {len(samsum_formatted)} train / {len(samsum_test)} test")
+print(f"SQL:    {len(sql_train)} train / {len(sql_test)} test")
 print(f"Alpaca: {len(alpaca_data)} samples")
 print(f"Dolly:  {len(dolly_formatted)} samples")
 

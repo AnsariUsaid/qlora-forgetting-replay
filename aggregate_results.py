@@ -18,7 +18,7 @@ BASELINES   = "results/baselines.json"
 
 FORGET_COLS = ["run", "quant_bits", "mode", "mmlu", "hellaswag", "winogrande",
                "arc_easy", "avg_general", "forgetting_score"]
-TASK_COLS   = ["run", "task", "quant_bits", "n_eval", "accuracy", "macro_f1", "rougeL"]
+TASK_COLS   = ["run", "task", "quant_bits", "n_eval", "accuracy", "macro_f1", "rougeL", "exact_match"]
 # Fields evaluate_forgetting.py reads back from baselines.json to compute FS.
 BASELINE_FIELDS = ["mmlu", "hellaswag", "winogrande", "arc_easy", "avg_general"]
 
