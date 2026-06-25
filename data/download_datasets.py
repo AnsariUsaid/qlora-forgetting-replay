@@ -104,12 +104,15 @@ with open("data/samsum_test.json", "w") as f:
     json.dump(samsum_test, f)
 
 # SQL ships ONLY a train split, so carve out our own held-out test (seed 42, like
-# every other split here). Subsample to ~10k train to match MedQA/Samsum scale, so
-# dataset size isn't an extra variable when comparing forgetting across tasks.
+# every other split here). 25k train (not 10k): SQL examples are SHORT, so 10k trained
+# in only ~87 min vs Samsum's ~200 min — too little training pressure to induce
+# measurable forgetting (FS ~2%, and the 4/8/16-bit ladder vanished into noise). 25k
+# makes SQL's training COMPUTE ~match Samsum's, so (a) forgetting has a fair chance to
+# show, and (b) training-token-count stops being a confound in cross-task FS comparisons.
 sql_all = [format_sql(x) for x in sql["train"]]
 random.Random(42).shuffle(sql_all)
 sql_test  = sql_all[:1000]
-sql_train = sql_all[1000:11000]
+sql_train = sql_all[1000:26000]
 with open("data/sql_train.json", "w") as f:
     json.dump(sql_train, f)
 with open("data/sql_test.json", "w") as f:

@@ -1,0 +1,10 @@
+{
+  "run": "base_16bit_sql",
+  "task": "sql",
+  "quant_bits": 16,
+  "n_eval": 500,
+  "accuracy": "",
+  "macro_f1": "",
+  "rougeL": "",
+  "exact_match": 8.2
+}
