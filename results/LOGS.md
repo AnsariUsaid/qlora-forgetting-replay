@@ -20,6 +20,14 @@ Samsum replay sweep — FS% by quant × replay:
 | 20% | 1.82 | 1.58 | 0.83 |
 | 30% | 2.63 | 2.18 | 1.44 |
 
+## SQL snapshot (2026-06-25) — trained @25k
+Adopted 25k after 10k trained too short to forget (4-bit 0% FS ~1.95 = noise). FS% by quant:
+| replay | 4-bit | 8-bit | 16-bit |
+|---|---|---|---|
+| 0% | 2.88 | — | _(stale 10k 2.08 — redo @25k)_ |
+Task exact-match: base 5.6 / 8.2 (4 / 16-bit) → tuned ~86–88. SQL task eval at `--limit 500`.
+Critical findings are in `OBSERVATIONS.md` (repo root).
+
 ## Notes / caveats
 - **Eval depth:** MMLU at `--limit 100` (per-subject ≈ 5,700 Qs); hellaswag/winogrande/
   arc at `--limit_general 1000`. Keep identical across all runs + baselines.
