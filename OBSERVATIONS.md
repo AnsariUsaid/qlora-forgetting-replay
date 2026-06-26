@@ -10,7 +10,10 @@ Brief, critical findings only — one takeaway each. Newest first. Full numbers 
   (4.32 > 1.77). At 10k it was invisible/inverted (1.95 vs 2.08), so **enough training
   pressure is a PREREQUISITE for the quant effect to appear.** Task score is quant-independent
   (88.0 vs 87.8) → the cost of low-bit quant shows up in FORGETTING, not task ability.
-  (Still need 8-bit 0% @25k to complete the 4>8>16 ladder.)
+- **SQL 0% ladder COMPLETE & monotonic: 4-bit 2.88 ≥ 8-bit 2.70 > 16-bit 1.56.** Same shape
+  as Samsum. The 4-vs-8 gap (0.18) is within noise (as on Samsum); the real, clear separation
+  is **quantized (4/8 ≈ 2.7–2.9) vs full-precision (16 ≈ 1.6)**. Task score quant-independent
+  at all three (~88%). Next: SQL replay sweep to test if the U-shape replicates too.
 
 ## 2026-06-25
 
