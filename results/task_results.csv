@@ -8,6 +8,8 @@ llama3b_4bit_replay30pct_samsum,samsum,4,100,,,45.98,
 base_4bit_sql,sql,4,500,,,,5.6
 llama3b_4bit_replay0pct_sql,sql,4,500,,,,88.0
 llama3b_4bit_replay10pct_sql,sql,4,500,,,,86.4
+llama3b_4bit_replay20pct_sql,sql,4,500,,,,87.0
+llama3b_4bit_replay30pct_sql,sql,4,500,,,,87.0
 base_8bit_samsum,samsum,8,100,,,15.3,
 llama3b_8bit_replay0pct_samsum,samsum,8,100,,,45.63,
 llama3b_8bit_replay10pct_samsum,samsum,8,100,,,45.62,
