@@ -50,7 +50,7 @@ def verify_quantization(model, quant_bits):
 
 def run_experiment(quant_bits: int, replay_ratio: float, task: str,
                    max_samples: int = None, epochs: int = 3,
-                   batch_size: int = 2, grad_accum: int = 8):
+                   batch_size: int = 2, grad_accum: int = 8, seed: int = 42):
     # ── Config ─────────────────────────────────────────────────────
     # Effective batch = batch_size * grad_accum = 16 (T4-safe defaults).
     MODEL_NAME = "unsloth/Llama-3.2-3B"  # full-precision base; quantize at load.
@@ -64,10 +64,12 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
     LR = 2e-4
 
     run_name = f"llama3b_{quant_bits}bit_replay{int(replay_ratio*100)}pct_{task}"
+    if seed != 42:                       # seed-repeat runs get a distinct name/folder
+        run_name += f"_seed{seed}"       # so repeats don't overwrite the seed-42 run
     wandb.init(project="qlora-forgetting", name=run_name,
                config=dict(quant_bits=quant_bits, replay_ratio=replay_ratio,
                             task=task, lora_rank=LORA_RANK, epochs=epochs,
-                            max_samples=max_samples))
+                            max_samples=max_samples, seed=seed))
 
     # ── Load model at the requested quantization ───────────────────
     # One base model, quantized at load → bit-width is the only variable.
@@ -92,7 +94,7 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
         lora_dropout=0.05,
         bias="none",
         use_gradient_checkpointing="unsloth",
-        random_state=42,
+        random_state=seed,
     )
 
     # ── Build dataset with replay ──────────────────────────────────
@@ -105,7 +107,7 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
     if max_samples is not None:
         task_data = task_data[:max_samples]
 
-    mixed_data = build_replay_dataset(task_data, alpaca_data, replay_ratio)
+    mixed_data = build_replay_dataset(task_data, alpaca_data, replay_ratio, seed=seed)
 
     # Split each example into PROMPT (what the model reads) and COMPLETION (what it
     # must learn to produce). The prompt ends exactly at "### Response:\n"; the answer
@@ -161,7 +163,7 @@ def run_experiment(quant_bits: int, replay_ratio: float, task: str,
             output_dir=f"outputs/{run_name}",
             report_to="wandb",
             save_strategy="epoch",
-            seed=42,
+            seed=seed,
         )
     )
 
@@ -196,7 +198,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=2,      # T4-safe
                         help="Per-device batch size. Lower if you hit CUDA OOM.")
     parser.add_argument("--grad_accum", type=int, default=8)
+    parser.add_argument("--seed", type=int, default=42,          # 42 = all prior runs
+                        help="Random seed (data order, LoRA init, trainer). "
+                             "Change it for seed-repeat / noise-estimate runs.")
     args = parser.parse_args()
     run_experiment(args.quant, args.replay, args.task,
                    max_samples=args.max_samples, epochs=args.epochs,
-                   batch_size=args.batch_size, grad_accum=args.grad_accum)
+                   batch_size=args.batch_size, grad_accum=args.grad_accum,
+                   seed=args.seed)
