@@ -18,6 +18,7 @@ llama3b_8bit_replay30pct_samsum,samsum,8,100,,,46.67,
 base_8bit_sql,sql,8,500,,,,7.8
 llama3b_8bit_replay0pct_sql,sql,8,500,,,,88.0
 llama3b_8bit_replay10pct_sql,sql,8,500,,,,86.2
+llama3b_8bit_replay20pct_sql,sql,8,500,,,,86.4
 base_16bit_samsum,samsum,16,100,,,15.28,
 llama3b_16bit_replay0pct_samsum,samsum,16,100,,,46.57,
 llama3b_16bit_replay10pct_samsum,samsum,16,100,,,46.76,
@@ -26,3 +27,4 @@ llama3b_16bit_replay30pct_samsum,samsum,16,100,,,46.18,
 base_16bit_sql,sql,16,500,,,,8.2
 llama3b_16bit_replay0pct_sql,sql,16,500,,,,87.8
 llama3b_16bit_replay10pct_sql,sql,16,500,,,,86.2
+llama3b_16bit_replay20pct_sql,sql,16,500,,,,85.8
