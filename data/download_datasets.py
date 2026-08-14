@@ -24,6 +24,7 @@ samsum = load_dataset("knkarthick/samsum")              # 14,732 train
 alpaca = load_dataset("yahma/alpaca-cleaned")
 dolly  = load_dataset("databricks/databricks-dolly-15k")
 sql    = load_dataset("b-mc2/sql-create-context")       # ~78,577 train ONLY (no test split)
+xsum   = load_dataset("EdinburghNLP/xsum")             # 204,045 train / 11,334 test
 
 # ── Format MedQA into instruction format ───────────────────────
 # Source schema (GBaker/MedQA-USMLE-4-options):
@@ -52,6 +53,15 @@ def format_samsum(example):
     return {
         "instruction": "Summarize the following conversation in 1-2 sentences.",
         "input": example["dialogue"],
+        "output": example["summary"],
+    }
+
+# ── Format XSum (BBC news → one-sentence summary) into instruction format ──
+# Source schema (EdinburghNLP/xsum): document (article), summary (1 sentence), id.
+def format_xsum(example):
+    return {
+        "instruction": "Summarize the following news article in one sentence.",
+        "input": example["document"],
         "output": example["summary"],
     }
 
@@ -118,9 +128,28 @@ with open("data/sql_train.json", "w") as f:
 with open("data/sql_test.json", "w") as f:
     json.dump(sql_test, f)
 
+# XSum is a HIGHER-divergence probe than Samsum: a whole news article compressed to one
+# sentence forces real rewriting, where Samsum's summaries stay close to the original
+# chat wording. Row count is pinned to Samsum's 14,731 ON PURPOSE — optimizer steps
+# depend on row count, so matching it gives both tasks identical numbers of weight
+# updates, making "XSum vs Samsum forgetting" a fair comparison with only the data
+# differing. (Measured: XSum costs 1.87x Samsum per example in tokens → ~6.4h training,
+# which still fits Kaggle's 12h commit window.) XSum ships its own test split, so unlike
+# SQL there's no need to carve one out.
+XSUM_TRAIN_ROWS = 14731                  # == len(samsum_formatted), matched by design
+xsum_train = [format_xsum(x) for x in
+              xsum["train"].shuffle(seed=42).select(range(XSUM_TRAIN_ROWS))]
+xsum_test  = [format_xsum(x) for x in
+              xsum["test"].shuffle(seed=42).select(range(500))]
+with open("data/xsum_train.json", "w") as f:
+    json.dump(xsum_train, f)
+with open("data/xsum_test.json", "w") as f:
+    json.dump(xsum_test, f)
+
 print(f"MedQA:  {len(medqa_formatted)} train / {len(medqa_test)} test")
 print(f"Samsum: {len(samsum_formatted)} train / {len(samsum_test)} test")
 print(f"SQL:    {len(sql_train)} train / {len(sql_test)} test")
+print(f"XSum:   {len(xsum_train)} train / {len(xsum_test)} test")
 print(f"Alpaca: {len(alpaca_data)} samples")
 print(f"Dolly:  {len(dolly_formatted)} samples")
 

@@ -158,12 +158,12 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
 
     if task == "medqa":
         metrics = score_medqa(data, model, tokenizer)
-    elif task == "samsum":
+    elif task in ("samsum", "xsum"):     # both = generate a summary → ROUGE-L
         metrics = score_samsum(data, model, tokenizer)
     elif task == "sql":
         metrics = score_sql(data, model, tokenizer)
     else:
-        raise ValueError(f"Unknown task '{task}' (expected medqa, samsum or sql).")
+        raise ValueError(f"Unknown task '{task}' (expected medqa, samsum, sql or xsum).")
 
     # Unified schema across tasks (irrelevant fields left blank).
     row = {
@@ -190,7 +190,8 @@ def evaluate_task(task: str, quant_bits: int, run_name: str, runs_dir: str,
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--task", type=str, required=True, choices=["medqa", "samsum", "sql"])
+    p.add_argument("--task", type=str, required=True,
+                   choices=["medqa", "samsum", "sql", "xsum"])
     p.add_argument("--quant", type=int, required=True, choices=[4, 8, 16])
     p.add_argument("--run", type=str, required=True,
                    help="Run name (also the per-run output folder name).")
