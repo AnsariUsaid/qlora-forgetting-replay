@@ -1,0 +1,10 @@
+{
+  "run": "base_8bit_xsum",
+  "task": "xsum",
+  "quant_bits": 8,
+  "n_eval": 100,
+  "accuracy": "",
+  "macro_f1": "",
+  "rougeL": 11.25,
+  "exact_match": ""
+}
