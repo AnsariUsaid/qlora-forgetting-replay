@@ -33,4 +33,5 @@ llama3b_16bit_replay10pct_sql,16,finetuned,57.07,64.8,67.0,75.7,66.14,1.16
 llama3b_16bit_replay20pct_samsum,16,finetuned,57.26,66.9,70.5,77.6,68.07,0.83
 llama3b_16bit_replay20pct_sql,16,finetuned,56.49,67.0,68.2,75.6,66.82,2.16
 llama3b_16bit_replay20pct_sql_seed2,16,finetuned,55.81,66.4,68.4,75.3,66.48,3.34
+llama3b_16bit_replay20pct_xsum,16,finetuned,57.54,66.5,69.5,75.4,67.24,0.35
 llama3b_16bit_replay30pct_samsum,16,finetuned,56.91,66.7,69.1,76.7,67.35,1.44
