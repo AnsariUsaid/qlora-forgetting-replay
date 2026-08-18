@@ -1,0 +1,10 @@
+{
+  "run": "llama3b_8bit_replay20pct_xsum",
+  "task": "xsum",
+  "quant_bits": 8,
+  "n_eval": 100,
+  "accuracy": "",
+  "macro_f1": "",
+  "rougeL": 31.8,
+  "exact_match": ""
+}

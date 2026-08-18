@@ -27,6 +27,7 @@ llama3b_8bit_replay10pct_sql,sql,8,500,,,,86.2
 llama3b_8bit_replay20pct_sql,sql,8,500,,,,86.4
 base_8bit_xsum,xsum,8,100,,,11.25,
 llama3b_8bit_replay0pct_xsum,xsum,8,100,,,33.17,
+llama3b_8bit_replay20pct_xsum,xsum,8,100,,,31.8,
 base_16bit_samsum,samsum,16,100,,,15.28,
 llama3b_16bit_replay0pct_samsum,samsum,16,100,,,46.57,
 llama3b_16bit_replay10pct_samsum,samsum,16,100,,,46.76,
