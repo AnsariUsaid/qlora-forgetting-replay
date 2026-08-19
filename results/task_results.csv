@@ -41,3 +41,4 @@ llama3b_16bit_replay20pct_sql_seed2,sql,16,500,,,,86.2
 base_16bit_xsum,xsum,16,100,,,11.39,
 llama3b_16bit_replay0pct_xsum,xsum,16,100,,,32.98,
 llama3b_16bit_replay20pct_xsum,xsum,16,100,,,33.36,
+llama3b_16bit_replay30pct_xsum,xsum,16,100,,,32.89,
